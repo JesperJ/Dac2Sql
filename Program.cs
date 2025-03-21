@@ -6,6 +6,7 @@ using Microsoft.SqlServer.Dac.Model;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 class Program
 {
@@ -100,6 +101,11 @@ class SchemaExtractor
             string name = obj.Name.Parts.Count > 0 ? obj.Name.Parts[^1] : "UnknownObject";
             string objectType = ObjectTypeMappings.ContainsKey(obj.ObjectType) ? ObjectTypeMappings[obj.ObjectType] : "Misc";
 
+            if (objectType == "Security")
+            {
+                schema = "Security"; // Force all security-related objects into the Security folder
+            }
+
             if (objectType == "Tables" || objectType == "Views")
             {
                 var schemaDef = _schemaDefinitions.FirstOrDefault(x => x.ObjectName == name && x.ObjectType == objectType && x.Schema == schema);
@@ -109,6 +115,7 @@ class SchemaExtractor
                     _schemaDefinitions.Add(schemaDef);
                 }
                 string script = ExtractTableOrViewDefinition(obj);
+                script += script.EndsWith("\nGO\n") ? "" : "\nGO\n";
                 schemaDef.Definitions.Add(script);
             }
             else if (!IsChildObject(obj) && TryExtractScript(obj, out string script))
@@ -124,11 +131,14 @@ class SchemaExtractor
     {
         foreach (var schemaDef in _schemaDefinitions)
         {
-            string schemaPath = Path.Combine(_outputDirectory, schemaDef.Schema, schemaDef.ObjectType);
+            string schemaPath = schemaDef.Schema == "Security"
+                ? Path.Combine(_outputDirectory, "Security")
+                : Path.Combine(_outputDirectory, schemaDef.Schema, schemaDef.ObjectType);
+            
             Directory.CreateDirectory(schemaPath);
 
             string filePath = Path.Combine(schemaPath, schemaDef.ObjectName + ".sql");
-            File.WriteAllText(filePath, string.Join("\n", schemaDef.Definitions));
+            File.WriteAllText(filePath, string.Join("\nGO\n", schemaDef.Definitions));
             Console.WriteLine($"Exported: {filePath}");
         }
     }
@@ -148,7 +158,7 @@ class SchemaExtractor
                 parts.Add(childScript);
             }
         }
-        return string.Join("\n", parts);
+        return string.Join("\nGO\n", parts);
     }
 
     private static bool TryExtractScript(TSqlObject obj, out string script)
