@@ -4,17 +4,18 @@ Inspired by the [SQL Database Projects](https://marketplace.visualstudio.com/ite
 
 ## Output Structure
 ```
-/ExportedSchema
-    /SchemaName
-        /Tables
-            TableName.sql
-        /Views
-            ViewName.sql
-        /StoredProcedures
-            ProcedureName.sql
-    /Security
-        CreateSchemaStatements.sql
-        CreateUserStatements.sql
+\Outputfolder
+    \DatabaseName
+        \SchemaName
+            \Tables
+                TableName.sql
+            \Views
+                ViewName.sql
+            \StoredProcedures
+                ProcedureName.sql
+        \Security
+            CreateSchemaStatements.sql
+            CreateUserStatements.sql
 ```
 
 ### Object Handling
@@ -39,12 +40,16 @@ Dac2Sql.exe <outputDirectory> [<databaseConnectionString> | <dacpacFilePath>]
 * **`<databaseConnectionString>`** – (Optional) MSSQL connection string to extract schema from a live database.
 * **`<dacpacFilePath>`** – (Optional) Path to a `.dacpac` file to extract schema from.
 
-**Note:** Extracting from a database via `ConnectionString` is **untested**.
 
 ## Example
-Extract schema from a .dacpac file:
+Extract .sql from a .dacpac file:
 ```
-Dac2Sql.exe .\ExportedSchema\ .\Database.dacpac
+Dac2Sql.exe .\ExportedDatabase .\Database.dacpac
+```
+
+Extract .sql from a database
+```
+Dac2Sql.exe .\ExportedDatabase "Server=servername;Database=dbname;Integrated Security=True"
 ```
 
 ## License

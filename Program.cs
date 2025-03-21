@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.IO;
 using Microsoft.SqlServer.Dac;
 using Microsoft.SqlServer.Dac.Model;
@@ -22,22 +22,27 @@ class Program
 
         string outputDirectory = args[0];
         string source = args[1];
+        string databaseName = "Database";
         TSqlModel model;
 
         if (File.Exists(source))
         {
             Console.WriteLine("Using DACPAC file: " + source);
+            databaseName = Path.GetFileNameWithoutExtension(source);
             model = LoadDacpac(source);
         }
         else
         {
-            Console.WriteLine("Extracting database schema from: " + source);
-            string dacpacPath = Path.Combine(outputDirectory, "database.dacpac");
+            var builder = new SqlConnectionStringBuilder(source);
+            databaseName = builder.InitialCatalog;
+            Console.WriteLine("Extracting database schema from: " + databaseName);
+            string dacpacPath = Path.Combine(outputDirectory, databaseName + ".dacpac");
             ExportDatabaseSchema(source, dacpacPath);
             model = LoadDacpac(dacpacPath);
         }
 
         Console.WriteLine("Extracting schema...");
+        outputDirectory = Path.Combine(outputDirectory, databaseName);
         var schemaExtractor = new SchemaExtractor(model, outputDirectory);
         schemaExtractor.ExtractSchemaObjects();
         schemaExtractor.WriteSchemaFiles();
@@ -47,10 +52,13 @@ class Program
     static void ExportDatabaseSchema(string connectionString, string dacpacPath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(dacpacPath) ?? "./");
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var databaseName = builder.InitialCatalog;
+
         var dacService = new DacServices(connectionString);
         dacService.Extract(
             dacpacPath,
-            "ExtractedDatabase",
+            databaseName,
             "1.0.0.0",
             new Version(1, 0, 0, 0),
             null,

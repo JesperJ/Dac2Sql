@@ -75,10 +75,20 @@ class SchemaExtractor
 
             Directory.CreateDirectory(schemaPath);
 
-            string filePath = Path.Combine(schemaPath, schemaDef.ObjectName + ".sql");
+            string safeFileName = SanitizeFileName(schemaDef.ObjectName);
+            string filePath = Path.Combine(schemaPath, safeFileName + ".sql");
             File.WriteAllText(filePath, string.Join("\nGO\n", schemaDef.Definitions));
             Console.WriteLine($"Exported: {filePath}");
         }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            name = name.Replace(c, '_');
+        }
+        return name;
     }
 
     private string ExtractTableOrViewDefinition(TSqlObject obj)
