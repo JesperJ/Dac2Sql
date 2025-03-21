@@ -13,6 +13,8 @@ Inspired by the [SQL Database Projects](https://marketplace.visualstudio.com/ite
                 ViewName.sql
             \StoredProcedures
                 ProcedureName.sql
+            \Functions
+                FunctionName.sql
         \Security
             CreateSchemaStatements.sql
             CreateUserStatements.sql

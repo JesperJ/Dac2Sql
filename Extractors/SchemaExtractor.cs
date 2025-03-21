@@ -21,8 +21,17 @@ class SchemaExtractor
         { ModelSchema.Table, "Tables" },
         { ModelSchema.View, "Views" },
         { ModelSchema.Procedure, "StoredProcedures" },
+        { ModelSchema.ScalarFunction, "Functions" },
+        { ModelSchema.TableValuedFunction, "Functions" },
         { ModelSchema.User, "Security" },
-        { ModelSchema.Schema, "Security" }
+        { ModelSchema.Schema, "Security" },
+        { ModelSchema.Role, "Security" },
+        { ModelSchema.DatabaseAuditSpecification, "Security" },
+        { ModelSchema.DatabaseDdlTrigger, "Security" },
+        { ModelSchema.AsymmetricKey, "Security" },
+        { ModelSchema.Certificate, "Security" },
+        { ModelSchema.SymmetricKey, "Security" },
+        { ModelSchema.Login, "Security" }
     };
 
     public SchemaExtractor(TSqlModel model, string outputDirectory)

@@ -2,3 +2,4 @@
 ExportedSchema/
 bin/*
 obj/*
+.vscode/*
