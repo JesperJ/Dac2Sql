@@ -1,0 +1,4 @@
+*.dacpac
+ExportedSchema/
+bin/*
+obj/*
