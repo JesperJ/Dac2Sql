@@ -35,7 +35,9 @@ class Program
         }
 
         Console.WriteLine("Extracting schema...");
-        ExtractSchemaObjects(model, outputDirectory);
+        var schemaExtractor = new SchemaExtractor(model, outputDirectory);
+        schemaExtractor.ExtractSchemaObjects();
+        schemaExtractor.WriteSchemaFiles();
         Console.WriteLine("Database schema exported successfully.");
     }
 
@@ -59,81 +61,79 @@ class Program
     {
         return new TSqlModel(dacpacPath, DacSchemaModelStorageType.Memory);
     }
+}
 
-    static void ExtractSchemaObjects(TSqlModel model, string outputDirectory)
+class SchemaDefinition
+{
+    public string Schema { get; set; }
+    public string ObjectName { get; set; }
+    public string ObjectType { get; set; }
+    public List<string> Definitions { get; set; } = new();
+}
+
+class SchemaExtractor
+{
+    private readonly TSqlModel _model;
+    private readonly string _outputDirectory;
+    private readonly List<SchemaDefinition> _schemaDefinitions = new();
+
+    private static readonly Dictionary<ModelTypeClass, string> ObjectTypeMappings = new()
     {
-        var objectTypeMappings = new Dictionary<ModelTypeClass, string>
-        {
-            { ModelSchema.Table, "Tables" },
-            { ModelSchema.View, "Views" },
-            { ModelSchema.Procedure, "StoredProcedures" },
-            { ModelSchema.User, "Security" },
-            { ModelSchema.Schema, "Security" }
-        };
+        { ModelSchema.Table, "Tables" },
+        { ModelSchema.View, "Views" },
+        { ModelSchema.Procedure, "StoredProcedures" },
+        { ModelSchema.User, "Security" },
+        { ModelSchema.Schema, "Security" }
+    };
 
-        Dictionary<string, List<string>> schemaDefinitions = new Dictionary<string, List<string>>();
+    public SchemaExtractor(TSqlModel model, string outputDirectory)
+    {
+        _model = model;
+        _outputDirectory = outputDirectory;
+    }
 
-        foreach (var obj in model.GetObjects(DacQueryScopes.UserDefined))
+    public void ExtractSchemaObjects()
+    {
+        foreach (var obj in _model.GetObjects(DacQueryScopes.UserDefined))
         {
             string schema = obj.Name.Parts.Count > 1 ? obj.Name.Parts[0] : "dbo";
             string name = obj.Name.Parts.Count > 0 ? obj.Name.Parts[^1] : "UnknownObject";
-            string objectType = objectTypeMappings.ContainsKey(obj.ObjectType) ? objectTypeMappings[obj.ObjectType] : "Misc";
-            
+            string objectType = ObjectTypeMappings.ContainsKey(obj.ObjectType) ? ObjectTypeMappings[obj.ObjectType] : "Misc";
+
             if (objectType == "Tables" || objectType == "Views")
             {
-                string parentKey = schema + "." + name;
-                if (!schemaDefinitions.ContainsKey(parentKey))
+                var schemaDef = _schemaDefinitions.FirstOrDefault(x => x.ObjectName == name && x.ObjectType == objectType && x.Schema == schema);
+                if (schemaDef == null)
                 {
-                    schemaDefinitions[parentKey] = new List<string>();
+                    schemaDef = new SchemaDefinition { Schema = schema, ObjectName = name, ObjectType = objectType };
+                    _schemaDefinitions.Add(schemaDef);
                 }
-
                 string script = ExtractTableOrViewDefinition(obj);
-                schemaDefinitions[parentKey].Add(script);
+                schemaDef.Definitions.Add(script);
             }
-            else if (objectType == "StoredProcedures")
+            else if (!IsChildObject(obj) && TryExtractScript(obj, out string script))
             {
-                string procKey = schema + "." + name;
-                if (!schemaDefinitions.ContainsKey(procKey))
-                {
-                    schemaDefinitions[procKey] = new List<string>();
-                }
-
-                if (TryExtractScript(obj, out string script))
-                {
-                    schemaDefinitions[procKey].Add(script);
-                }
-            }
-            else
-            {
-                string schemaKey = schema + "." + objectType;
-                if (!schemaDefinitions.ContainsKey(schemaKey))
-                {
-                    schemaDefinitions[schemaKey] = new List<string>();
-                }
-
-                if (TryExtractScript(obj, out string script))
-                {
-                    schemaDefinitions[schemaKey].Add(script);
-                }
+                var schemaDef = new SchemaDefinition { Schema = schema, ObjectName = name, ObjectType = objectType };
+                schemaDef.Definitions.Add(script);
+                _schemaDefinitions.Add(schemaDef);
             }
         }
+    }
 
-        foreach (var schemaEntry in schemaDefinitions)
+    public void WriteSchemaFiles()
+    {
+        foreach (var schemaDef in _schemaDefinitions)
         {
-            string[] parts = schemaEntry.Key.Split('.');
-            string schema = parts[0];
-            string objectName = parts.Length > 1 ? parts[1] : "Unknown";
-            string objectType = objectTypeMappings.Values.Contains(objectName) ? objectName : "StoredProcedures";
-            string schemaPath = Path.Combine(outputDirectory, schema, objectType);
+            string schemaPath = Path.Combine(_outputDirectory, schemaDef.Schema, schemaDef.ObjectType);
             Directory.CreateDirectory(schemaPath);
 
-            string filePath = Path.Combine(schemaPath, objectName + ".sql");
-            File.WriteAllText(filePath, string.Join("\n", schemaEntry.Value));
+            string filePath = Path.Combine(schemaPath, schemaDef.ObjectName + ".sql");
+            File.WriteAllText(filePath, string.Join("\n", schemaDef.Definitions));
             Console.WriteLine($"Exported: {filePath}");
         }
     }
 
-    static string ExtractTableOrViewDefinition(TSqlObject obj)
+    private string ExtractTableOrViewDefinition(TSqlObject obj)
     {
         List<string> parts = new List<string>();
         if (TryExtractScript(obj, out string tableScript))
@@ -143,20 +143,15 @@ class Program
         
         foreach (var child in obj.GetChildren(DacQueryScopes.UserDefined))
         {
-            if (child.ObjectType == ModelSchema.DmlTrigger || child.ObjectType == ModelSchema.Index ||
-                child.ObjectType == ModelSchema.ExtendedProperty || child.ObjectType == ModelSchema.UniqueConstraint ||
-                child.ObjectType == ModelSchema.PrimaryKeyConstraint || child.ObjectType == ModelSchema.ForeignKeyConstraint)
+            if (IsChildObject(child) && TryExtractScript(child, out string childScript))
             {
-                if (TryExtractScript(child, out string childScript))
-                {
-                    parts.Add(childScript);
-                }
+                parts.Add(childScript);
             }
         }
         return string.Join("\n", parts);
     }
 
-    static bool TryExtractScript(TSqlObject obj, out string script)
+    private static bool TryExtractScript(TSqlObject obj, out string script)
     {
         try
         {
@@ -171,5 +166,12 @@ class Program
         }
         script = string.Empty;
         return false;
+    }
+
+    private static bool IsChildObject(TSqlObject obj)
+    {
+        return obj.ObjectType == ModelSchema.DmlTrigger || obj.ObjectType == ModelSchema.Index ||
+               obj.ObjectType == ModelSchema.ExtendedProperty || obj.ObjectType == ModelSchema.UniqueConstraint ||
+               obj.ObjectType == ModelSchema.PrimaryKeyConstraint || obj.ObjectType == ModelSchema.ForeignKeyConstraint;
     }
 }
